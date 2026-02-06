@@ -7,6 +7,14 @@ images and scripts.
 
 Made with Electron.
 
+Downloads:
+
+- Download for Windows 32-bit: [113 MB](https://github.com/glennhenry/Archive-Browser/releases/download/1/Archive.Browser-win32.zip)
+- Download for Windows 64-bit: [131 MB](https://github.com/glennhenry/Archive-Browser/releases/download/1/Archive.Browser-win32-x64.zip)
+- Download for macOS ARM 64: [330 MB](https://github.com/glennhenry/Archive-Browser/releases/download/1/Archive.Browser-darwin-arm64.zip)
+- Download for macOS 64-bit: [340 MB](https://github.com/glennhenry/Archive-Browser/releases/download/1/Archive.Browser-darwin-x64.zip)
+- Download for Linux 64-bit: [111 MB](https://github.com/glennhenry/Archive-Browser/releases/download/1/Archive.Browser-linux-x64.zip.zip)
+
 ## Details
 
 The auto-capture system only captures responses from GET requests and only
