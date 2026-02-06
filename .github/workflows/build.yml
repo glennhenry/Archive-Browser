@@ -1,0 +1,57 @@
+name: Build Electron App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            arch: ia32
+            script: package:win32
+          - os: windows-latest
+            arch: x64
+            script: package:win64
+          - os: macos-latest
+            arch: x64
+            script: package:mac:x64
+          - os: macos-latest
+            arch: arm64
+            script: package:mac:arm64
+          - os: ubuntu-latest
+            arch: x64
+            script: package:linux
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+
+      - name: Build Windows 32-bit
+        if: matrix.os == 'windows-latest' && matrix.arch == 'ia32'
+        run: npm run package:win32
+
+      - name: Build Windows 64-bit
+        if: matrix.os == 'windows-latest' && matrix.arch == 'x64'
+        run: npm run package:win64
+
+      - name: Build macOS
+        if: matrix.os == 'macos-latest' && matrix.arch == 'x64'
+        run: npm run package:mac:x64
+        
+      - name: Build macOS ARM
+        if: matrix.os == 'macos-latest' && matrix.arch == 'arm64'
+        run: npm run package:mac:arm64
+
+      - name: Build Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run package:linux
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.os }}-${{ matrix.arch }}
+          path: release/

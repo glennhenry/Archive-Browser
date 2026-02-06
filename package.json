@@ -1,0 +1,25 @@
+{
+  "name": "auto-capture-browser",
+  "version": "1.0.0",
+  "description": "Archive Browser",
+  "license": "ISC",
+  "author": "glennhenry",
+  "type": "commonjs",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "package:win32": "electron-packager . \"Archive Browser\" --platform=win32 --arch=ia32 --out=release --overwrite --asar --icon=resources/logo.ico",
+    "package:win64": "electron-packager . \"Archive Browser\" --platform=win32 --arch=x64 --out=release --overwrite --asar --icon=resources/logo.ico",
+    "package:mac:x64": "electron-packager . \"Archive Browser\" --platform=darwin --arch=x64 --out=release --overwrite --asar --icon=resources/logo.icns",
+    "package:mac:arm64": "electron-packager . \"Archive Browser\" --platform=darwin --arch=arm64 --out=release --overwrite --asar --icon=resources/logo.icns",
+    "package:linux": "electron-packager . \"Archive Browser\" --platform=linux --arch=x64 --out=release --overwrite --asar --icon=resources/logo.png"
+  },
+  "devDependencies": {
+    "@electron/packager": "^19.0.2",
+    "electron": "^40.2.1"
+  },
+  "dependencies": {
+    "sanitize-filename": "^1.6.3"
+  }
+}
