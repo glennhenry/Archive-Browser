@@ -2,8 +2,6 @@
 release/
 .vscode/
 output/
-whitelist.txt
-capture.cfg
 logs/
 
 # Logs

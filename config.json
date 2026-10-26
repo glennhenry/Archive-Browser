@@ -1,0 +1,8 @@
+{
+  "startUrl": "https://google.com",
+  "warnBeforeClose": true,
+  "whitelist": ["*"],
+  "captureOnStart": false,
+  "overwriteMode": "never",
+  "disableLogs": false
+}

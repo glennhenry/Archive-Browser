@@ -13,6 +13,72 @@ const fs = require("fs");
 const sanitize = require("sanitize-filename");
 
 /** CORE BROWSER */
+let data = {};
+
+app.on("ready", () => {
+  try {
+    if (fs.existsSync("config.json")) {
+      const file = fs.readFileSync("config.json");
+      data = JSON.parse(file);
+      console.log(data);
+
+      captureOnStart = data.captureOnStart ?? false;
+      overwriteMode = data.overwriteMode ?? NEVER_OVERWRITE;
+      disableLogs = data.disableLogs ?? false;
+      whitelist = data.whitelist ?? ["*"];
+    }
+  } catch (error) {
+    console.error("Fail to read config.json: ", error.message);
+  }
+
+  initializeDownloadedCache();
+  runBrowserApp();
+  if (captureOnStart) {
+    startCapture();
+  }
+
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) runBrowserApp();
+  });
+});
+
+app.on("window-all-closed", () => {
+  stopCapture();
+  if (process.platform !== "darwin") app.quit();
+});
+
+let mainWindow;
+
+const runBrowserApp = () => {
+  createMainWindow();
+  initializeBrowserMenu(mainWindow);
+
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_a, errorCode, errorDescription, _b, _c) => {
+      const errorHTML = `
+<html><body style="background-color:#d4c8b8;color:#3b3732;display:flex;justify-content:center;align-items:center;height:100vh;margin:0"><div style="text-align:center;font-family:Arial,sans-serif"><h1>Sorry, it seems like the webpage failed to load. Try re-open the browser.</h1><p>Details: (${errorCode}) ${errorDescription}.</p></div></body></html>
+        `;
+      mainWindow.loadURL(
+        "data:text/html;charset=utf-8," + encodeURIComponent(errorHTML),
+      );
+      mainWindow.show();
+    },
+  );
+};
+
+function createMainWindow() {
+  const url = data.startUrl ?? "https://google.com";
+  mainWindow = createWindow(url, true);
+
+  contextMenu = new Menu();
+  contextMenu.append(new MenuItem({ label: "Copy", role: "copy" }));
+  contextMenu.append(new MenuItem({ label: "Paste", role: "paste" }));
+
+  mainWindow.webContents.on("context-menu", (_, params) => {
+    contextMenu.popup({ window: mainWindow, x: params.x, y: params.y });
+  });
+}
 
 let windows = [];
 
@@ -41,38 +107,46 @@ function createWindow(startUrl, isMain = false) {
   win.on("close", (event) => {
     if (isMain) {
       event.preventDefault();
-      dialog
-        .showMessageBox(win, {
-          type: "question",
-          buttons: ["Cancel", "Exit"],
-          defaultId: 0,
-          cancelId: 0,
-          title: "Confirm Exit",
-          message: "Are you sure you want to exit the browser?",
-          detail: "WARNING: All open windows will be closed.",
-        })
-        .then((result) => {
-          if (result.response === 1) {
-            windows.forEach((w) => {
-              if (w !== win && !w.isDestroyed()) w.destroy();
-            });
-            windows = [];
-
-            // stop capture when main window is closed
-            stopCapture();
-
-            win.removeAllListeners("close");
-            win.close();
-          }
-        });
+      if (data.warnBeforeClose == null || data.warnBeforeClose == true) {
+        dialog
+          .showMessageBox(win, {
+            type: "question",
+            buttons: ["Cancel", "Exit"],
+            defaultId: 0,
+            cancelId: 0,
+            title: "Confirm Exit",
+            message: "Are you sure you want to exit the browser?",
+            detail: "WARNING: All open windows will be closed.",
+            checkboxLabel: "Do not ask me again",
+            checkboxChecked: false,
+          })
+          .then((result) => {
+            if (result.response === 1) {
+              if (result.checkboxChecked) {
+                data.warnBeforeClose = false;
+                try {
+                  fs.writeFileSync(
+                    "config.json",
+                    JSON.stringify(data, null, 2),
+                  );
+                } catch (error) {
+                  console.error("Write config.json error: ", error.message);
+                }
+              }
+              // stop capture when main window is closed
+              stopCapture();
+              closeAllWindows();
+            }
+          });
+      } else {
+        // stop capture when there are no more windows
+        if (windows.length === 0) {
+          stopCapture();
+        }
+        closeAllWindows();
+      }
     } else {
       windows = windows.filter((w) => w !== win);
-
-      // stop capture when there are no more windows
-      if (windows.length === 0) {
-        stopCapture();
-      }
-
       win.destroy();
     }
   });
@@ -81,63 +155,15 @@ function createWindow(startUrl, isMain = false) {
   return win;
 }
 
-let mainWindow;
-
-function createMainWindow() {
-  mainWindow = createWindow("https://www.google.com", true);
-
-  contextMenu = new Menu();
-  contextMenu.append(new MenuItem({ label: "Copy", role: "copy" }));
-  contextMenu.append(new MenuItem({ label: "Paste", role: "paste" }));
-
-  mainWindow.webContents.on("context-menu", (_, params) => {
-    contextMenu.popup({ window: mainWindow, x: params.x, y: params.y });
+function closeAllWindows() {
+  windows.forEach((w) => {
+    if (w !== mainWindow && !w.isDestroyed()) w.destroy();
   });
+  windows = [];
+
+  mainWindow.removeAllListeners("close");
+  mainWindow.close();
 }
-
-const runBrowserApp = () => {
-  createMainWindow();
-  initializeBrowserMenu(mainWindow);
-
-  mainWindow.webContents.on(
-    "did-fail-load",
-    (_a, errorCode, errorDescription, _b, _c) => {
-      const errorHTML = `
-            <html>
-            <body style="background-color: #d4c8b8; color: #3b3732; display:flex; justify-content:center; align-items:center; height:100vh; margin:0;">
-                <div style="text-align:center; font-family: Arial, sans-serif;">
-                    <h1>Sorry, it seems like the webpage failed to load.</h1>
-                    <p>Details: (${errorCode}) ${errorDescription}.</p>
-                </div>
-            </body>
-            </html>
-        `;
-      mainWindow.loadURL(
-        "data:text/html;charset=utf-8," + encodeURIComponent(errorHTML),
-      );
-      mainWindow.show();
-    },
-  );
-};
-
-app.on("ready", () => {
-  initializeCaptureList();
-  initializeDownloadedCache();
-  parseCaptureCfg();
-  runBrowserApp();
-  if (captureOnStart) {
-    startCapture();
-  }
-
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) runBrowserApp();
-  });
-});
-
-app.on("window-all-closed", () => {
-  stopCapture();
-  if (process.platform !== "darwin") app.quit();
-});
 
 let appMenu;
 let captureMenuItem = null;
@@ -152,9 +178,11 @@ function initializeBrowserMenu() {
           click: () => openUrlPrompt(),
         },
         {
-          label: "Force Exit",
-          click(_, focusedWindow) {
-            if (focusedWindow) app.exit();
+          label: "Go to Google.com",
+          click: (_, focusedWindow) => {
+            if (focusedWindow && !focusedWindow.isDestroyed()) {
+              focusedWindow.loadURL("https://google.com");
+            }
           },
         },
         {
@@ -162,12 +190,25 @@ function initializeBrowserMenu() {
           accelerator: "CmdOrCtrl+R",
           click(_, focusedWindow) {
             if (focusedWindow && !focusedWindow.isDestroyed()) {
-              const url = focusedWindow.webContents.getURL();
-
-              focusedWindow.destroy();
-
-              createWindow(url);
+              focusedWindow.webContents.reload();
             }
+          },
+        },
+        {
+          label: "Force Reload",
+          click(_, focusedWindow) {
+            if (!focusedWindow || focusedWindow.isDestroyed()) return;
+            if (focusedWindow == mainWindow) {
+              focusedWindow.webContents.reload();
+              return;
+            }
+            const contents = focusedWindow.webContents;
+            if (contents.isCrashed()) {
+              contents.reload();
+              return;
+            }
+            contents.forcefullyCrashRenderer();
+            contents.reload();
           },
         },
         {
@@ -175,6 +216,12 @@ function initializeBrowserMenu() {
           accelerator: process.platform === "darwin" ? "Command+I" : "Ctrl+I",
           click(_, focusedWindow) {
             if (focusedWindow) focusedWindow.webContents.toggleDevTools();
+          },
+        },
+        {
+          label: "Force Exit",
+          click(_, focusedWindow) {
+            if (focusedWindow) app.exit();
           },
         },
       ],
@@ -256,7 +303,6 @@ function initializeBrowserMenu() {
   ];
 
   appMenu = Menu.buildFromTemplate(template);
-  captureMenuItem = appMenu.items[3].submenu.items[0];
   const helpMenuItem = appMenu.getMenuItemById("helpMenu");
   const devToolsMenuItem = new MenuItem({
     label: "Toggle Developer Tools",
@@ -300,7 +346,7 @@ function initializeBrowserMenu() {
 
 function openUrlPrompt() {
   const promptWin = new BrowserWindow({
-    width: 300,
+    width: 400,
     height: 150,
     resizable: false,
     alwaysOnTop: true,
@@ -312,16 +358,7 @@ function openUrlPrompt() {
     },
   });
 
-  const html = `<style>body{font-family:sans-serif;margin:12px}input{width:100%;padding:8px;font-size:14px;margin-bottom:12px}.btn-row{display:flex;justify-content:flex-end;gap:8px}</style><h3 style="margin-top:0">Enter URL</h3><input id="url" placeholder="https://www.google.com" value="https://www.google.com"><div class="btn-row"><button onclick="closeWin()">Cancel</button><button onclick="submit()">OK</button></div><script>const { ipcRenderer } = require("electron");
-
-  function submit() {
-    ipcRenderer.send("url-entered", document.getElementById("url").value);
-    window.close();
-  }
-
-  function closeWin() {
-    window.close();
-  }</script>`;
+  const html = `<style>body{font-family:sans-serif;margin:12px}input{width:100%;padding:8px;font-size:14px;margin-bottom:12px}.btn-row{display:flex;justify-content:flex-end;gap:8px}</style><h3 style="margin-top:0;font-size:14px;">Enter URL (must starts with http:// or https://)</h3><input id="url" placeholder="https://example.com" value="https://example.com"><div class="btn-row"><button onclick="closeWin()">Cancel</button><button onclick="submit()">OK</button></div><script>const{ipcRenderer:ipcRenderer}=require("electron");function submit(){ipcRenderer.send("url-entered",document.getElementById("url").value),window.close()}function closeWin(){window.close()}</script>`;
 
   // Load as a data URL
   promptWin.loadURL("data:text/html;charset=utf-8," + encodeURIComponent(html));
@@ -331,28 +368,38 @@ function openUrlPrompt() {
     console.log("Entered:", `'${url}'`);
     promptWin.close();
 
-    createWindow(url);
+    createWindow(url, false);
   });
 }
 
 function clearHTTPCache() {
   try {
     session.defaultSession.clearCache();
-    console.log(magenta("HTTP cache cleared."));
+    console.log("HTTP cache cleared.");
   } catch (err) {
-    console.error(magenta("Error clearing cache:"), err);
+    console.error("Error clearing cache:", err);
   }
 }
 
 function clearStorageData() {
   try {
     session.defaultSession.clearStorageData();
-    console.log(magenta("Storage data cleared."));
+    console.log("Storage data cleared.");
     app.relaunch();
     app.exit();
   } catch (error) {
-    console.error(magenta("Error clearing storage data:", error));
+    console.error("Error clearing storage data:", error);
   }
+}
+
+if (!Map.prototype.getOrInsert) {
+  Map.prototype.getOrInsert = function (key, defaultValue) {
+    if (this.has(key)) {
+      return this.get(key);
+    }
+    this.set(key, defaultValue);
+    return defaultValue;
+  };
 }
 
 /** AUTO CAPTURE */
@@ -362,21 +409,19 @@ const baseDir = app.isPackaged
   : path.join(process.cwd());
 
 const OUTPUT_DIR = path.join(baseDir, "output");
-const WHITELIST_FILE = path.join(baseDir, "whitelist.txt");
 const LOG_DIR = path.join(baseDir, "logs");
-const CONFIG_FILE = path.join(baseDir, "capture.cfg");
 
-const NEVER_OVERWRITE = 1;
-const ALWAYS_OVERWRITE_EVERY_1_WEEK = 2;
-const ALWAYS_OVERWRITE_EVERY_1_MONTH = 3;
-const ALWAYS_OVERWRITE = 4;
+const NEVER_OVERWRITE = "never";
+const ALWAYS_OVERWRITE_EVERY_1_WEEK = "always-week";
+const ALWAYS_OVERWRITE_EVERY_1_MONTH = "always-month";
+const ALWAYS_OVERWRITE = "always";
 
-// can be set from configs in capture.cfg
-let captureOnStart = false;
-let overwriteMode = ALWAYS_OVERWRITE_EVERY_1_WEEK;
-let disableLogs = true;
+// can be set from config.json
+let captureOnStart; // default false
+let overwriteMode; // default NEVER_OVERWRITE
+let disableLogs; // default false
 
-let whitelist = [];
+let whitelist; // default ["*"] capture everything
 let isCapturing = false;
 let captureStats = {
   total: 0,
@@ -547,45 +592,6 @@ function saveRequestHook() {
   });
 }
 
-function parseCaptureCfg() {
-  if (!fs.existsSync(CONFIG_FILE)) return;
-
-  const text = fs.readFileSync(CONFIG_FILE, "utf8");
-  const lines = text.split(/\r?\n/);
-
-  for (let line of lines) {
-    line = line.trim();
-    // skip empty lines and comment
-    if (!line || line.startsWith("#")) continue;
-
-    // structure: key=value
-    const [rawKey, rawValue] = line.split("=");
-    if (!rawKey || rawValue === undefined) continue;
-
-    const key = rawKey.trim();
-    const value = rawValue.trim();
-
-    switch (key) {
-      case "captureOnStart":
-        captureOnStart = value === "1";
-        break;
-
-      case "overwriteMode":
-        overwriteMode =
-          {
-            1: NEVER_OVERWRITE,
-            2: ALWAYS_OVERWRITE_EVERY_1_WEEK,
-            3: ALWAYS_OVERWRITE_EVERY_1_MONTH,
-            4: ALWAYS_OVERWRITE,
-          }[value] ?? ALWAYS_OVERWRITE_EVERY_1_WEEK;
-        break;
-
-      case "disableLogs":
-        disableLogs = value === "1";
-    }
-  }
-}
-
 function bytesToKbOrMB(bytes) {
   const kb = bytes / 1000;
   const mb = bytes / 1000 / 1000;
@@ -687,22 +693,6 @@ function ensureParentDir(dirPath) {
       throw err;
     }
   }
-}
-
-function initializeCaptureList() {
-  try {
-    if (fs.existsSync(WHITELIST_FILE)) {
-      const content = fs.readFileSync(WHITELIST_FILE, "utf-8");
-      const l = content
-        .split(/\r?\n/) // split lines (handles Windows \r\n and Unix \n)
-        .map((line) => line.trim()) // remove extra spaces
-        .filter((line) => line.length > 0 && !line.startsWith("#")); // remove empty lines and comments
-      whitelist = whitelist.concat(l);
-    }
-  } catch (err) {
-    console.error(red("Failed to read WHITELIST file:"), err);
-  }
-  console.log(magenta("WHITELIST:"), whitelist);
 }
 
 function updateCaptureStatusLabel(msg) {
