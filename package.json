@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@electron/packager": "^20.3.0",
-    "electron": "^45.0.0"
+    "electron": "^43.0.0"
   },
   "dependencies": {
     "sanitize-filename": "^1.6.4"
